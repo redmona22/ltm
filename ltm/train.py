@@ -33,6 +33,7 @@ def evaluate(model, n_tables=30, seed=12345, max_rows=300, max_feats=20):
     rng = np.random.default_rng(seed)
     model.eval()
     res = {"classification": ([], []), "regression": ([], [])}
+    maj = []
     for _ in range(n_tables):
         X, cm, y, n_ctx, task, k = make_episode(rng, max_rows, max_feats)
         Xn, yn = X.numpy(), y.numpy()
@@ -43,6 +44,7 @@ def evaluate(model, n_tables=30, seed=12345, max_rows=300, max_feats=20):
         if task == "classification":
             res[task][0].append(accuracy_score(yn[n_ctx:], out.argmax(1).numpy()))
             res[task][1].append(accuracy_score(yn[n_ctx:], gb.predict(Xn[n_ctx:])))
+            maj.append(accuracy_score(yn[n_ctx:], np.full(len(yn) - n_ctx, np.bincount(yn[:n_ctx]).argmax())))
         else:
             ym, ys = yn[:n_ctx].mean(), max(yn[:n_ctx].std(), 1e-6)
             res[task][0].append(r2_score(yn[n_ctx:], out.numpy() * ys + ym))
@@ -50,7 +52,8 @@ def evaluate(model, n_tables=30, seed=12345, max_rows=300, max_feats=20):
     model.train()
     for task, (a, b) in res.items():
         metric = "accuracy" if task == "classification" else "R2"
-        print(f"  {task:14s} {metric}: LTM {np.mean(a):.3f} | HistGB {np.mean(b):.3f} (n={len(a)})")
+        extra = f" | majority class {np.mean(maj):.3f}" if task == "classification" else ""
+        print(f"  {task:14s} {metric}: LTM {np.mean(a):.3f} | HistGB {np.mean(b):.3f}{extra} (n={len(a)})")
 
 
 def main():
@@ -88,7 +91,7 @@ def main():
             print(f"step {step} | cls loss {c:.3f} | reg mse {r:.3f} (1.0 = predict mean) | {time.time() - t0:.0f}s")
         if step % 500 == 0 or step == a.steps:
             torch.save({"model": model.state_dict(), "d": a.d, "layers": a.layers}, a.out)
-            evaluate(model)
+            evaluate(model, max_rows=a.max_rows, max_feats=a.max_feats)
 
 
 if __name__ == "__main__":
