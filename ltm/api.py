@@ -4,8 +4,8 @@ import torch
 
 from .model import LTM
 
-MAX_CTX = 1000   # context rows kept at fit time
-CHUNK = 500      # query rows per forward pass (exact: query rows never see each other)
+MAX_CTX = 400    # context rows kept at fit time (v1 was trained on tables up to 600 rows)
+CHUNK = 200      # query rows per forward pass (exact: query rows never see each other)
 
 
 def _load(path):
@@ -18,7 +18,7 @@ def _load(path):
 class _Base:
     task = None
 
-    def __init__(self, checkpoint="ltm_small.pt", cat_features=None, max_ctx=MAX_CTX, random_state=0):
+    def __init__(self, checkpoint="ltm_v1.pt", cat_features=None, max_ctx=MAX_CTX, random_state=0):
         self.checkpoint = checkpoint
         self.cat_features = cat_features
         self.max_ctx = max_ctx
