@@ -12,6 +12,7 @@ Inputs may be one table (X: (N, F)) or a batch of tables with the same shape
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 MAX_COLS = 128
 MAX_CAT = 12       # categorical codes 0..MAX_CAT-1; index MAX_CAT = missing
@@ -48,6 +49,7 @@ class LTM(nn.Module):
         self.norm = nn.LayerNorm(d)
         self.cls_head = nn.Linear(d, MAX_CLASSES)
         self.reg_head = nn.Linear(d, 1)
+        self.grad_ckpt = False   # trade compute for memory during training
 
     def forward(self, X, cat_mask, y_ctx, task, n_classes):
         """X: (N, F) or (B, N, F) float, NaN = missing, context rows first.
@@ -91,7 +93,10 @@ class LTM(nn.Module):
         mask = torch.zeros(N, N, dtype=torch.bool, device=dev)
         mask[:, n_ctx:] = True                                        # keys are context rows only
         for b in self.blocks:
-            h = b(h, mask)
+            if self.grad_ckpt and self.training:
+                h = checkpoint(b, h, mask, use_reentrant=False)
+            else:
+                h = b(h, mask)
         out = self.norm(h[:, n_ctx:, -1])                             # target token of query rows
 
         if task == "classification":

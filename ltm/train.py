@@ -110,6 +110,8 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default="ltm_v1.pt")
     p.add_argument("--resume", action="store_true")
+    p.add_argument("--init", default=None, help="start from these weights (new optimizer and schedule)")
+    p.add_argument("--ckpt", action="store_true", help="gradient checkpointing: less memory, ~30%% slower")
     a = p.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -120,8 +122,17 @@ def main():
         st = torch.load(state_path, map_location="cpu")
         a.d, a.layers, start, opt_state = ck["d"], ck["layers"], st["step"] + 1, st["opt"]
 
+    init_sd = None
+    if opt_state is None and a.init:
+        ik = torch.load(a.init, map_location="cpu")
+        a.d, a.layers, init_sd = ik["d"], ik["layers"], ik["model"]
+
     torch.manual_seed(a.seed)
     model = LTM(d=a.d, layers=a.layers).to(device)
+    model.grad_ckpt = a.ckpt
+    if init_sd is not None:
+        model.load_state_dict(init_sd)
+        print(f"initialized from {a.init}")
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=0.01)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, a.lr, total_steps=a.steps, pct_start=0.03)
     if opt_state is not None:
